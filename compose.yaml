@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg17
+    environment:
+      POSTGRES_USER: flowpay_admin
+      POSTGRES_PASSWORD: ${FLOWPAY_DB_PASSWORD:-flowpay_local}
+      POSTGRES_DB: flowpay_knowledge
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - flowpay_postgres:/var/lib/postgresql/data
+      # 数据集挂载（用于恢复 dump）
+      - ${FLOWPAY_DATASET_ROOT}:/dataset:ro
+
+  # 开发用数据库 Web 界面：只发布在本机回环，浏览/查询知识库。
+  adminer:
+    image: adminer:4.8.1
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - postgres
+
+  # 嵌入服务：必需，用户每次提问都要现场将问题嵌成向量。
+  # 映射 11434 端口供宿主机 Python 脚本与容器共同访问。
+  ollama:
+    image: ollama/ollama:0.12.3
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - flowpay_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  flowpay_postgres:
+  flowpay_ollama:

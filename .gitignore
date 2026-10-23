@@ -1,0 +1,95 @@
+# ============================================================
+# FlowPay .gitignore
+# 只提交源码、配置模板与文档；排除密钥、本地配置、数据文件与构建产物
+# ============================================================
+
+# ---------- 密钥与本地环境配置（高风险，禁止提交） ----------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets/
+# 本地运行配置（make up 会生成，可能包含密钥或本机绝对路径）
+backend/configs/local.toml
+configs/*.local.toml
+
+# ---------- 数据文件（整个数据集都不提交） ----------
+# 知识文档、冻结索引、benchmark、生成快照、postgres dump 全部只保留在本地
+flowpay-dataset/
+# 数据集压缩包（FLOWPAY_DATASET_ROOT 可能指向的 .tar.gz / .zip）
+flowpay-dataset*.tar.gz
+flowpay-dataset*.zip
+# 其他本地数据库与数据文件
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.duckdb
+*.parquet
+data/
+var/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.eggs/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright_cache/
+.tox/
+.nox/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---------- Node / 前端 ----------
+node_modules/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 日志、缓存与临时文件 ----------
+*.log
+logs/
+tmp/
+temp/
+.cache/
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.rej
+
+# ---------- IDE / 操作系统 ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Claude Code 本地设置 ----------
+.claude/settings.local.json
