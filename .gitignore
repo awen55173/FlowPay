@@ -26,6 +26,7 @@ configs/*.local.toml
 flowpay-dataset/data/generated/
 flowpay-dataset*.tar.gz
 flowpay-dataset*.zip
+flowpay-dataset
 
 # 本地数据库与临时数据文件
 *.sqlite
