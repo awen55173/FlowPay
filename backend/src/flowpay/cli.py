@@ -42,7 +42,7 @@ def main() -> None:
     """启动单进程服务；默认 s1，模拟验收有独立脚本入口。"""
     parser = argparse.ArgumentParser(description="FlowPay local runtime")
     parser.add_argument("--config", type=Path, default=None)
-    parser.add_argument("--stage", help="课程阶段，目前支持 s1、s2、s3")
+    parser.add_argument("--stage", help="检索阶段，目前支持 s1、s2、s3、s4")
     args = parser.parse_args(namespace=Arguments())
     try:
         settings = configured_runtime(args)
