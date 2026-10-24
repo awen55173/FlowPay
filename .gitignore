@@ -1,6 +1,6 @@
 # ============================================================
 # FlowPay .gitignore
-# 只提交源码、配置模板与文档；排除密钥、本地配置、数据文件与构建产物
+# 只提交源码、配置模板与文档；排除密钥、本地配置、数据快照与构建产物
 # ============================================================
 
 # ---------- 密钥与本地环境配置（高风险，禁止提交） ----------
@@ -13,20 +13,29 @@
 *.pfx
 secrets/
 .secrets/
-# 本地运行配置（make up 会生成，可能包含密钥或本机绝对路径）
-backend/configs/local.toml
-configs/*.local.toml
 
-# ---------- 数据文件（整个数据集都不提交） ----------
-# 知识文档、冻结索引、benchmark、生成快照、postgres dump 全部只保留在本地
-flowpay-dataset/
-# 数据集压缩包（FLOWPAY_DATASET_ROOT 可能指向的 .tar.gz / .zip）
+# 本地运行配置（保留模板，排除本机实际配置）
+backend/configs/local.toml
+!backend/configs/local.toml.example
+configs/*.local.toml
+!configs/*.local.toml.example
+
+# ---------- 数据工程与本地快照 ----------
+# 保留 flowpay-dataset 的源码、文档、知识库与基准设计
+# 仅排除本机运行生成的大体积业务快照（约 150MB+）
+flowpay-dataset/data/generated/
 flowpay-dataset*.tar.gz
 flowpay-dataset*.zip
-# 其他本地数据库与数据文件
+
+# 本地数据库与临时数据文件
 *.sqlite
 *.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
 *.db
+*.db-wal
+*.db-shm
 *.dump
 *.duckdb
 *.parquet
@@ -67,6 +76,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+frontend/dist/
+dist-ssr/
+.eslintcache
 
 # ---------- 日志、缓存与临时文件 ----------
 *.log
@@ -81,15 +93,19 @@ temp/
 *.orig
 *.rej
 
-# ---------- IDE / 操作系统 ----------
+# ---------- IDE / 操作系统 / AI 工具 ----------
 .idea/
 .vscode/
+.cursor/
+.windsurf/
+.claude/settings.local.json
 *.swp
 *.swo
 *~
 .DS_Store
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
 desktop.ini
-
-# ---------- Claude Code 本地设置 ----------
-.claude/settings.local.json
