@@ -1,5 +1,5 @@
 [project]
-name = "flowpay-teaching"
+name = "flowpay"
 version = "0.1.0"
 description = "Traceable runtime for the FlowPay RAG course"
 requires-python = ">=3.12,<3.14"
