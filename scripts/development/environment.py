@@ -2,20 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-if sys.platform == "win32":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-        sys.stderr.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-
 import argparse
-try:
-    import fcntl
-except ImportError:
-    fcntl = None
 import hashlib
+import io
 import json
 import os
 import shlex
@@ -25,6 +14,26 @@ import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+
+# 确保 Windows 控制台支持 UTF-8 打印特殊符号 (如 ✓, ✗)
+if sys.platform == "win32":
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
+
+# 跨平台文件锁支持：Windows 使用 msvcrt，Linux/macOS 使用 fcntl
+if sys.platform == "win32":
+    import msvcrt
+    fcntl = None
+else:
+    msvcrt = None
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
 
 ROOT = Path(__file__).resolve().parents[2]
 # 会话与轨迹存在本地 SQLite，只有知识库需要 PostgreSQL。它只发布在 127.0.0.1，
@@ -43,12 +52,22 @@ class PreparationError(Exception):
     """可直接显示的操作提示，不包含连接字符串或密码。"""
 
 
+def venv_python_path() -> Path:
+    """返回虚拟环境中的 python 解释器路径（跨平台兼容 Windows 与 Unix）。"""
+    if sys.platform == "win32":
+        path = ROOT / "backend/.venv/Scripts/python.exe"
+        if not path.exists():
+            path = ROOT / "backend/.venv/python.exe"
+        return path
+    return ROOT / "backend/.venv/bin/python"
+
+
 def read_env(path: Path) -> dict[str, str]:
     """解析简单 KEY=value 文件，不执行 shell 或展开命令；保留现有文件原文。"""
     values: dict[str, str] = {}
     if not path.exists():
         return values
-    for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+    for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -77,24 +96,20 @@ def prepare_env(path: Path, inherited: dict[str, str]) -> dict[str, str]:
     """读取 .env 并补齐缺省项；shell 环境优先，已有内容不重写。"""
     existing = read_env(path)
     values = {**existing, **inherited}
-    password = values.get("FLOWPAY_DB_PASSWORD", "flowpay_local")
-    db_host = "127.0.0.1:55432/flowpay_knowledge"
-    values.setdefault("FLOWPAY_KNOWLEDGE_ADMIN_DSN", f"postgresql://flowpay_admin:{password}@{db_host}")
-    values.setdefault("FLOWPAY_KNOWLEDGE_DSN", f"postgresql://flowpay_knowledge_reader:{password}@{db_host}")
-    values.setdefault("FLOWPAY_KNOWLEDGE_BUILDER_DSN", f"postgresql://flowpay_knowledge_builder:{password}@{db_host}")
-    if values.get("FLOWPAY_DATASET_ROOT") and not values.get("FLOWPAY_DATASET_PATH"):
-        values["FLOWPAY_DATASET_PATH"] = f"{values['FLOWPAY_DATASET_ROOT']}/data"
     additions: dict[str, str] = {}
     if not values.get("OLLAMA_API_KEY"):
         additions["OLLAMA_API_KEY"] = "ollama"
     if additions:
         # 仅追加缺失配置，不重写用户注释及模型设置。创建文件时即使用私有权限。
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+        with open(path, "a", encoding="utf-8") as handle:
             handle.write("\n# make setup 自动补齐的本地配置\n")
             for key, value in additions.items():
                 handle.write(f"{key}={shlex.quote(value)}\n")
-        path.chmod(0o600)
+        if sys.platform != "win32":
+            try:
+                path.chmod(0o600)
+            except OSError:
+                pass
     return {**values, **additions}
 
 
@@ -102,19 +117,17 @@ def command(
     args: list[str], env: dict[str, str], *, timeout: int = 30
 ) -> subprocess.CompletedProcess[str]:
     """捕获命令输出供检查；上层只展示脱敏错误，超时给出恢复提示。"""
-    resolved = list(args)
-    which = shutil.which(resolved[0], path=env.get("PATH"))
-    if which:
-        resolved[0] = which
     try:
         return subprocess.run(
-            resolved,
+            args,
             cwd=ROOT,
             env=env,
             text=True,
             capture_output=True,
             timeout=timeout,
             check=False,
+            encoding="utf-8",
+            errors="replace",
         )
     except subprocess.TimeoutExpired:
         raise PreparationError(f"{args[0]} 执行超时；检查服务后重新运行。") from None
@@ -134,9 +147,12 @@ def execute(args: list[str], env: dict[str, str], label: str) -> None:
     for key, value in env.items():
         if value and any(word in key for word in ("PASSWORD", "DSN", "API_KEY")):
             output = output.replace(value, "[REDACTED]")
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(output)
+    path.write_text(output, encoding="utf-8", errors="replace")
+    if sys.platform != "win32":
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass
     if result.returncode:
         raise PreparationError(
             f"{label}未完成。请查看 {path.relative_to(ROOT)}，修复后重跑 make setup。"
@@ -147,17 +163,33 @@ def execute(args: list[str], env: dict[str, str], label: str) -> None:
 def check_tools(env: dict[str, str], knowledge: bool, external: bool = False) -> bool:
     """检查前置工具和 Docker 服务；不安装软件、不启动系统服务。"""
     good = True
-    tools = (
-        ["uv", "node", "npm"]
-        + ([] if external else ["docker"])
-        + (["ollama"] if knowledge else [])
-    )
+    tools = ["uv", "node", "npm"] + ([] if external else ["docker"])
     for tool in tools:
         if not shutil.which(tool, path=env.get("PATH")):
             print(f"✗ 缺少 {tool}；请安装后重新执行。")
             good = False
         else:
             print(f"✓ {tool} 已安装")
+
+    # 针对 ollama 检查：支持宿主机 PATH 安装，或 127.0.0.1:11434 端口服务运行（如 Docker 容器）
+    if knowledge:
+        if shutil.which("ollama", path=env.get("PATH")):
+            print("✓ ollama 已安装 (系统 PATH)")
+        else:
+            import urllib.request
+
+            ollama_up = False
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:11434/api/version", timeout=1.5):
+                    ollama_up = True
+            except Exception:
+                pass
+            if ollama_up:
+                print("✓ ollama 服务可用 (127.0.0.1:11434)")
+            else:
+                print("✗ 缺少 ollama；请在宿主机安装 Ollama 或启动 Docker 中的 Ollama 容器。")
+                good = False
+
     if not good:
         return False
     version = command(["node", "--version"], env).stdout.strip().lstrip("v").split(".")
@@ -178,11 +210,18 @@ def check_tools(env: dict[str, str], knowledge: bool, external: bool = False) ->
 def dependencies_ready() -> bool:
     """对照锁文件指纹判断依赖是否经过本入口同步；不触发安装。"""
     marker = ROOT / "var/setup/dependencies.json"
-    if not marker.exists() or not (ROOT / "frontend/node_modules/.bin/vite").exists():
+    bin_dir = ROOT / "frontend/node_modules/.bin"
+    vite_found = (
+        (bin_dir / "vite").exists()
+        or (bin_dir / "vite.cmd").exists()
+        or (bin_dir / "vite.ps1").exists()
+        or (ROOT / "frontend/node_modules/vite/bin/vite.js").exists()
+    )
+    if not marker.exists() or not vite_found:
         return False
     try:
-        return marker.read_text(encoding='utf-8') == json.dumps(dependency_hashes(), sort_keys=True)
-    except ValueError:
+        return marker.read_text(encoding="utf-8") == json.dumps(dependency_hashes(), sort_keys=True)
+    except (ValueError, OSError):
         return False
 
 
@@ -235,7 +274,7 @@ def perform(operation: str) -> None:
                 execute(["npm", "--prefix", "frontend", "ci"], env, "同步前端依赖")
             else:
                 print("✓ 前端依赖与锁文件匹配，跳过安装")
-            marker.write_text(json.dumps(dependency_hashes(), sort_keys=True))
+            marker.write_text(json.dumps(dependency_hashes(), sort_keys=True), encoding="utf-8")
             if not args.external_db:
                 # 只点名 postgres：宿主机直跑用宿主机的 Ollama，不需要容器里那套嵌入服务，
                 # 后端和前端也由 make run / make frontend 直接起。
@@ -246,7 +285,7 @@ def perform(operation: str) -> None:
                 )
             execute(
                 [
-                    str(((ROOT / "backend/.venv/Scripts/python.exe") if sys.platform == "win32" and (ROOT / "backend/.venv/Scripts/python.exe").exists() else (ROOT / "backend/.venv/bin/python"))),
+                    str(venv_python_path()),
                     "scripts/database.py",
                     "setup",
                 ],
@@ -256,7 +295,7 @@ def perform(operation: str) -> None:
         elif not dependencies_ready():
             print("✗ 依赖尚未通过统一入口同步，或锁文件已变化；请运行 make setup。")
             raise PreparationError("后续检查已跳过。")
-        python = ((ROOT / "backend/.venv/Scripts/python.exe") if sys.platform == "win32" and (ROOT / "backend/.venv/Scripts/python.exe").exists() else (ROOT / "backend/.venv/bin/python"))
+        python = venv_python_path()
         if not python.exists():
             raise PreparationError("缺少后端虚拟环境；请执行 make setup。")
         runtime = [str(python), "-m", "scripts.development.checks", operation]
@@ -286,13 +325,36 @@ def setup_lock(operation: str) -> Generator[None]:
         return
     directory = ROOT / "var/setup"
     directory.mkdir(parents=True, exist_ok=True)
-    with (directory / "setup.lock").open("a") as handle:
-        try:
-            if fcntl is not None:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise PreparationError("另一个 make setup 正在执行，请等待完成。") from None
-        yield
+    lock_path = directory / "setup.lock"
+
+    if sys.platform == "win32" and msvcrt is not None:
+        # Windows: 使用 msvcrt.locking 对首字节加排他非阻塞锁
+        with lock_path.open("a+b") as handle:
+            if handle.tell() == 0:
+                _ = handle.write(b"x")
+                handle.flush()
+            _ = handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                raise PreparationError("另一个 make setup 正在执行，请等待完成。") from None
+            try:
+                yield
+            finally:
+                try:
+                    _ = handle.seek(0)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+    else:
+        # Linux / macOS: 使用 fcntl.flock
+        with lock_path.open("a") as handle:
+            try:
+                if fcntl is not None:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise PreparationError("另一个 make setup 正在执行，请等待完成。") from None
+            yield
 
 
 def main(operation: str) -> None:

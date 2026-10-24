@@ -1,14 +1,18 @@
 ﻿<#
 .SYNOPSIS
-  FlowPay 项目管理脚本 
+  FlowPay Windows 项目管理脚本 (1:1 完整对标 Makefile)
 .DESCRIPTION
-  统一管理环境准备、数据库、全栈启动、测试与门禁。
+  统一在 Windows 上执行全栈容器、本地环境准备、数据库、前后端服务、测试与质量门禁。
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Position=0)]
-    [ValidateSet("help", "setup", "doctor", "db-up", "db-setup", "up", "down", "logs", "run", "frontend", "verify-db", "test-ollama", "test-embedder", "test", "quality")]
+    [ValidateSet(
+        "help", "setup", "doctor", "db-up", "db-setup", "up", "down", "logs", 
+        "run", "frontend", "test", "quality", "benchmark", "blueprints", 
+        "demo", "smoke", "verify-db", "test-ollama", "test-embedder"
+    )]
     [string]$Target = "help",
 
     [Parameter(Position=1, ValueFromRemainingArguments=$true)]
@@ -20,6 +24,18 @@ $ErrorActionPreference = "Stop"
 
 $ROOT = $PSScriptRoot
 $VENV_PYTHON = Join-Path $ROOT "backend\.venv\Scripts\python.exe"
+$CONFIG = "backend/configs/local.toml"
+
+function Invoke-Py {
+    param([Parameter(ValueFromRemainingArguments=$true)]$ArgsList)
+    if (Test-Path $VENV_PYTHON) {
+        & $VENV_PYTHON @ArgsList
+    } elseif (Get-Command uv -ErrorAction SilentlyContinue) {
+        & uv run python @ArgsList
+    } else {
+        & python @ArgsList
+    }
+}
 
 function Load-Env {
     $envFile = Join-Path $ROOT ".env"
@@ -55,79 +71,114 @@ function Load-Env {
 
 function Show-Help {
     Write-Host ""
-    Write-Host "FlowPay 常用管理命令 (PowerShell 对标 KamaAgenticRAG Makefile):" -ForegroundColor Cyan
+    Write-Host "FlowPay Windows 常用开发命令 (完整对标 Makefile):" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  .\manage.ps1 setup          一键准备环境：同步配置、uv 依赖、数据库启动与授权"
-    Write-Host "  .\manage.ps1 doctor         只读诊断基础工具与环境状态"
-    Write-Host "  .\manage.ps1 db-up          只启动 PostgreSQL 容器"
-    Write-Host "  .\manage.ps1 db-setup       执行 Alembic 结构迁移与角色权限配置"
+    Write-Host "【全栈路径 (Docker 容器)】" -ForegroundColor Yellow
+    Write-Host "  .\manage.ps1 up             起全栈：校验 .env、备好数据库、知识库与嵌入模型，起全部容器"
+    Write-Host "  .\manage.ps1 down           停止全栈容器，数据卷保留"
+    Write-Host "  .\manage.ps1 logs           跟踪后端与前端容器日志"
+    Write-Host ""
+    Write-Host "【宿主机直跑 (开发与调试)】" -ForegroundColor Yellow
+    Write-Host "  .\manage.ps1 setup          一键准备本地配置、依赖、数据库与知识集合 (含 uv sync)"
+    Write-Host "  .\manage.ps1 doctor         只读检查基础环境，不安装依赖也不调用聊天模型"
+    Write-Host "  .\manage.ps1 db-up          只起 PostgreSQL 容器"
+    Write-Host "  .\manage.ps1 db-setup       执行知识库结构迁移与角色授权"
+    Write-Host "  .\manage.ps1 run            启动后端服务 (可通过 -Stage s1/s2/s3/s4 指定阶段)"
+    Write-Host "  .\manage.ps1 frontend       启动前端开发服务器 (Vite dev)"
+    Write-Host ""
+    Write-Host "【开发与质量门禁】" -ForegroundColor Yellow
+    Write-Host "  .\manage.ps1 test           只跑 backend pytest"
+    Write-Host "  .\manage.ps1 quality        运行代码质量门禁 (ruff / pyright / pytest / 前端构建)"
+    Write-Host "  .\manage.ps1 demo           起确定性契约后端，只验协议不跑课程阶段"
+    Write-Host "  .\manage.ps1 smoke          对着已在跑的后端验 HTTP/SSE：断线回放、取消与继续"
+    Write-Host "  .\manage.ps1 benchmark      数据集 300 题分层评测对照"
+    Write-Host "  .\manage.ps1 blueprints     将 300 题渲染成可读 Markdown"
+    Write-Host ""
+    Write-Host "【模块自检工具】" -ForegroundColor Yellow
     Write-Host "  .\manage.ps1 verify-db      运行 test_knowledge_db.py 验证知识库完整性"
     Write-Host "  .\manage.ps1 test-ollama    运行 test_ollama.py 测试 Ollama 原生端点"
-    Write-Host "  .\manage.ps1 test-embedder  运行 test_embedder.py 测试 Python 封装客户端"
-    Write-Host "  .\manage.ps1 up             全栈启动容器"
-    Write-Host "  .\manage.ps1 down           停止全栈容器并保留数据卷"
-    Write-Host "  .\manage.ps1 logs           查看后端和前端容器日志"
-    Write-Host "  .\manage.ps1 test           运行后端单元测试 (pytest)"
-    Write-Host "  .\manage.ps1 quality        运行代码质量门禁 (ruff / pyright / pytest)"
-    Write-Host "  .\manage.ps1 run            在宿主机启动后端服务"
+    Write-Host "  .\manage.ps1 test-embedder  运行 test_embedder.py 测试 Python 嵌入客户端"
     Write-Host ""
 }
 
-switch ($Target) {
-    "help" {
-        Show-Help
+# 确保在仓库根目录执行
+Push-Location $ROOT
+
+try {
+    switch ($Target) {
+        "help" {
+            Show-Help
+        }
+        "up" {
+            Load-Env
+            Invoke-Py scripts/start.py @ExtraArgs
+        }
+        "down" {
+            docker compose down @ExtraArgs
+        }
+        "logs" {
+            docker compose logs -f backend frontend
+        }
+        "setup" {
+            Load-Env
+            Invoke-Py scripts/setup.py @ExtraArgs
+        }
+        "doctor" {
+            Load-Env
+            Invoke-Py scripts/doctor.py @ExtraArgs
+        }
+        "db-up" {
+            docker compose up -d --wait postgres
+        }
+        "db-setup" {
+            Load-Env
+            Invoke-Py scripts/database.py setup
+        }
+        "run" {
+            Load-Env
+            $stage = if ($env:STAGE) { $env:STAGE } else { "s1" }
+            Invoke-Py -m flowpay --config $CONFIG --stage $stage @ExtraArgs
+        }
+        "frontend" {
+            npm --prefix frontend run dev
+        }
+        "test" {
+            Load-Env
+            Invoke-Py -m pytest backend/tests -q @ExtraArgs
+        }
+        "quality" {
+            Load-Env
+            Invoke-Py scripts/check_quality.py @ExtraArgs
+        }
+        "benchmark" {
+            Load-Env
+            Invoke-Py scripts/benchmark/run.py --stages s1,s2,s3,s4 --per-type 2 @ExtraArgs
+        }
+        "blueprints" {
+            Load-Env
+            Invoke-Py scripts/benchmark/render.py @ExtraArgs
+        }
+        "demo" {
+            Load-Env
+            Invoke-Py scripts/demo.py --config $CONFIG @ExtraArgs
+        }
+        "smoke" {
+            Load-Env
+            Invoke-Py scripts/smoke_runtime.py @ExtraArgs
+        }
+        "verify-db" {
+            Load-Env
+            Invoke-Py scripts/test_knowledge_db.py
+        }
+        "test-ollama" {
+            Load-Env
+            Invoke-Py scripts/test_ollama.py
+        }
+        "test-embedder" {
+            Load-Env
+            Invoke-Py scripts/test_embedder.py
+        }
     }
-    "setup" {
-        Load-Env
-        & uv run python scripts/setup.py @ExtraArgs
-    }
-    "doctor" {
-        Load-Env
-        & uv run python scripts/doctor.py @ExtraArgs
-    }
-    "db-up" {
-        docker compose up -d --wait postgres
-    }
-    "db-setup" {
-        Load-Env
-        & $VENV_PYTHON scripts/database.py setup
-    }
-    "verify-db" {
-        Load-Env
-        & $VENV_PYTHON scripts/test_knowledge_db.py
-    }
-    "test-ollama" {
-        Load-Env
-        & $VENV_PYTHON scripts/test_ollama.py
-    }
-    "test-embedder" {
-        Load-Env
-        & $VENV_PYTHON scripts/test_embedder.py
-    }
-    "up" {
-        Load-Env
-        & uv run python scripts/start.py @ExtraArgs
-    }
-    "down" {
-        docker compose down
-    }
-    "logs" {
-        docker compose logs -f backend frontend
-    }
-    "test" {
-        Load-Env
-        & $VENV_PYTHON -m pytest backend/tests -q @ExtraArgs
-    }
-    "quality" {
-        Load-Env
-        & $VENV_PYTHON scripts/check_quality.py @ExtraArgs
-    }
-    "run" {
-        Load-Env
-        $stage = if ($env:STAGE) { $env:STAGE } else { "s1" }
-        & $VENV_PYTHON -m flowpay --config backend/configs/local.toml --stage $stage @ExtraArgs
-    }
-    "frontend" {
-        npm --prefix frontend run dev
-    }
+} finally {
+    Pop-Location
 }

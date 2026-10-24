@@ -1,14 +1,16 @@
-import sys
-if sys.platform == 'win32':
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-        sys.stderr.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
 """只读检查本地环境，不安装依赖、不调用聊天模型。"""
 
+import io
 import sys
 from pathlib import Path
+
+if sys.platform == "win32":
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
 
 
 def main() -> None:

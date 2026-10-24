@@ -53,6 +53,21 @@ def test_resolve_dataset_unpacks_bundle(tmp_path: Path, suffix: str) -> None:
         assert (tmp_path / name).read_text() == content
 
 
+def test_docker_proxy_environment_maps_local_proxy_and_keeps_bypasses() -> None:
+    env = start.docker_proxy_environment(
+        {
+            "HTTP_PROXY": "http://127.0.0.1:7897",
+            "HTTPS_PROXY": "http://localhost:7897",
+            "ALL_PROXY": "socks5://127.0.0.1:7897",
+            "NO_PROXY": "example.test,localhost",
+        }
+    )
+    assert env["FLOWPAY_HTTP_PROXY"] == "http://host.docker.internal:7897"
+    assert env["FLOWPAY_HTTPS_PROXY"] == "http://host.docker.internal:7897"
+    assert env["FLOWPAY_NO_PROXY"] == "example.test,localhost,127.0.0.1,postgres,ollama,backend"
+    assert "FLOWPAY_ALL_PROXY" not in env
+
+
 @pytest.mark.parametrize("suffix", [".zip", ".tar.gz"])
 def test_repeat_start_reuses_extracted_dataset(tmp_path: Path, suffix: str) -> None:
     bundle = write_bundle(tmp_path / f"dataset{suffix}")

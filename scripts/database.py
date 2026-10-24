@@ -11,22 +11,13 @@ from pathlib import Path
 from typing import cast
 
 import psycopg
-try:
-    from flowpay.core.json import require_text
-except ImportError:
-    def require_text(val: object) -> str:
-        if not isinstance(val, str):
-            raise TypeError(f"Expected str, got {type(val)}")
-        return val
+from flowpay.core.json import require_text
 from psycopg import sql
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def setup() -> None:
-    if "FLOWPAY_KNOWLEDGE_ADMIN_DSN" not in os.environ:
-        password = os.environ.get("FLOWPAY_DB_PASSWORD", "flowpay_local")
-        os.environ["FLOWPAY_KNOWLEDGE_ADMIN_DSN"] = f"postgresql://flowpay_admin:{password}@127.0.0.1:55432/flowpay_knowledge"
     """为知识库运行迁移并配置最小运行权限。
 
     使用管理员 DSN 做部署操作。reader 只读，builder 可新增文档并补缺向量，
