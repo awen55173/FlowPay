@@ -64,8 +64,14 @@ function Load-Env {
     if (-not $env:FLOWPAY_KNOWLEDGE_BUILDER_DSN) {
         $env:FLOWPAY_KNOWLEDGE_BUILDER_DSN = "postgresql://flowpay_knowledge_builder:$password@$dbHost"
     }
-    if ($env:FLOWPAY_DATASET_ROOT -and -not $env:FLOWPAY_DATASET_PATH) {
+    if ($env:FLOWPAY_DATASET_ROOT) {
+        if (-not [System.IO.Path]::IsPathRooted($env:FLOWPAY_DATASET_ROOT)) {
+            $env:FLOWPAY_DATASET_ROOT = [System.IO.Path]::GetFullPath((Join-Path $ROOT $env:FLOWPAY_DATASET_ROOT))
+        }
+        # 强制更新为绝对路径，避免继承已有终端中残留的相对路径
         $env:FLOWPAY_DATASET_PATH = Join-Path $env:FLOWPAY_DATASET_ROOT "data"
+    } elseif ($env:FLOWPAY_DATASET_PATH -and -not [System.IO.Path]::IsPathRooted($env:FLOWPAY_DATASET_PATH)) {
+        $env:FLOWPAY_DATASET_PATH = [System.IO.Path]::GetFullPath((Join-Path $ROOT $env:FLOWPAY_DATASET_PATH))
     }
 }
 
@@ -136,8 +142,26 @@ try {
         }
         "run" {
             Load-Env
+            Write-Host "› 确保 PostgreSQL 已启动"
+            docker compose up -d --wait postgres
             $stage = if ($env:STAGE) { $env:STAGE } else { "s1" }
-            Invoke-Py -m flowpay --config $CONFIG --stage $stage @ExtraArgs
+            $parsedArgs = @()
+            $specifiedStage = $null
+            for ($i = 0; $i -lt $ExtraArgs.Count; $i++) {
+                $arg = $ExtraArgs[$i]
+                if ($arg -match '^-{1,2}(stage|Stage)$') {
+                    if ($i + 1 -lt $ExtraArgs.Count) {
+                        $specifiedStage = $ExtraArgs[$i + 1]
+                        $i++
+                    }
+                } elseif ($arg -match '^-{1,2}(stage|Stage)=(.+)$') {
+                    $specifiedStage = $Matches[2]
+                } else {
+                    $parsedArgs += $arg
+                }
+            }
+            $activeStage = if ($specifiedStage) { $specifiedStage } else { $stage }
+            Invoke-Py -m flowpay --config $CONFIG --stage $activeStage @parsedArgs
         }
         "frontend" {
             npm --prefix frontend run dev

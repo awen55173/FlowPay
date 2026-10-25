@@ -168,7 +168,7 @@ def test_zip_rejects_existing_symlink_escape(tmp_path: Path) -> None:
 
 def prepare_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, revision: str = DIGEST + "a" * 52
-) -> tuple[list[tuple[str, ...]], list[str], Path]:
+) -> tuple[list[tuple[str, ...]], list[str], list[str], Path]:
     """装好一次 start.main 所需的 .env、数据包与配置，并替换掉所有 docker 调用。"""
     monkeypatch.setattr(start, "ROOT", tmp_path)
     monkeypatch.setattr("sys.argv", ["start.py"])
@@ -184,6 +184,7 @@ def prepare_start(
     )
     calls: list[tuple[str, ...]] = []
     dataset_paths: list[str] = []
+    stages: list[str] = []
 
     def ready(env: dict[str, str]) -> bool:
         dataset_paths.append(env[start.DATASET_KEY])
@@ -193,6 +194,7 @@ def prepare_start(
         assert env is not None
         calls.append(args)
         dataset_paths.append(env[start.DATASET_KEY])
+        stages.append(env["STAGE"])
 
     def capture(*args: str, env: dict[str, str] | None = None) -> str:
         return MODEL_LIST if args[-1] == "list" else ""
@@ -200,13 +202,13 @@ def prepare_start(
     monkeypatch.setattr(start, "knowledge_ready", ready)
     monkeypatch.setattr(start, "compose", compose)
     monkeypatch.setattr(start, "capture", capture)
-    return calls, dataset_paths, env_file
+    return calls, dataset_paths, stages, env_file
 
 
 def test_start_passes_extracted_zip_directory_to_compose(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls, dataset_paths, env_file = prepare_start(tmp_path, monkeypatch)
+    calls, dataset_paths, stages, env_file = prepare_start(tmp_path, monkeypatch)
     original = env_file.read_bytes()
     start.main()
     # 嵌入服务在后端之前就位：模型没下载完就起后端，第一个问题仍会失败。
@@ -217,14 +219,26 @@ def test_start_passes_extracted_zip_directory_to_compose(
         ("up", "-d"),
     ]
     assert dataset_paths == [str(tmp_path / "flowpay-dataset-v1")] * 5
+    assert stages == ["s1"] * 4
     assert env_file.read_bytes() == original
+
+
+@pytest.mark.parametrize("stage", ["s1", "s2", "s3", "s4"])
+def test_start_passes_selected_stage_to_compose(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    """CLI 阶段选择传给所有 Compose 准备和启动步骤。"""
+    _, _, stages, _ = prepare_start(tmp_path, monkeypatch)
+    monkeypatch.setattr("sys.argv", ["start.py", "--stage", stage])
+    start.main()
+    assert stages == [stage] * 4
 
 
 def test_start_stops_when_embedding_digest_drifts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """同名标签被上游换过就不能继续：数据包里的向量属于原模型。"""
-    calls, _, _ = prepare_start(tmp_path, monkeypatch, revision="b" * 64)
+    calls, _, _, _ = prepare_start(tmp_path, monkeypatch, revision="b" * 64)
     with pytest.raises(SystemExit, match="数据包里的向量属于原模型"):
         start.main()
     assert ("up", "-d") not in calls

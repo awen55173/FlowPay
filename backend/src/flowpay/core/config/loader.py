@@ -91,11 +91,25 @@ def resolve_paths(config: JsonObject, directory: Path) -> JsonObject:
     for field in ("data_dir", "dataset_path"):
         if field not in resolved:
             raise ValueError(f"Missing configuration field: {field}")
-        resolved[field] = (directory / require_text(resolved[field])).resolve()
+        target = Path(require_text(resolved[field]))
+        if target.is_absolute():
+            resolved[field] = target.resolve()
+        elif (directory / target).exists():
+            resolved[field] = (directory / target).resolve()
+        elif (Path.cwd() / target).exists():
+            resolved[field] = (Path.cwd() / target).resolve()
+        else:
+            resolved[field] = (directory / target).resolve()
     if resolved.get("sources_config"):
-        resolved["sources_config"] = (
-            directory / require_text(resolved["sources_config"])
-        ).resolve()
+        target = Path(require_text(resolved["sources_config"]))
+        if target.is_absolute():
+            resolved["sources_config"] = target.resolve()
+        elif (directory / target).exists():
+            resolved["sources_config"] = (directory / target).resolve()
+        elif (Path.cwd() / target).exists():
+            resolved["sources_config"] = (Path.cwd() / target).resolve()
+        else:
+            resolved["sources_config"] = (directory / target).resolve()
     return resolved
 
 

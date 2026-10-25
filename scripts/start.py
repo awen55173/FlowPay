@@ -17,10 +17,11 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import tomllib
 import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+
+import tomllib
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,9 +41,10 @@ DOCKER_INTERNAL_HOSTS = ("localhost", "127.0.0.1", "postgres", "ollama", "backen
 
 
 class Arguments(argparse.Namespace):
-    """命令行参数；默认起全栈，可选强制重建镜像。"""
+    """命令行参数；默认启动 s1，可选阶段和强制重建镜像。"""
 
     build: bool = False
+    stage: str | None = None
 
 
 def say(message: str) -> None:
@@ -324,12 +326,14 @@ def main() -> None:
     """校验配置、准备数据、起全栈；每一步都可以单独重跑。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", action="store_true", help="强制重新构建镜像")
+    parser.add_argument("--stage", choices=("s1", "s2", "s3", "s4"), help="选择工作流阶段")
     args = parser.parse_args(namespace=Arguments())
     values = read_env()
     dataset = resolve_dataset(values[DATASET_KEY])
     say(f"数据集：{dataset}")
     # compose 读 shell 环境优先于 .env，因此这里传绝对路径，用户写的相对路径原样保留。
-    env = {**os.environ, DATASET_KEY: str(dataset)}
+    stage = args.stage or values.get("STAGE") or "s1"
+    env = {**os.environ, "STAGE": stage, DATASET_KEY: str(dataset)}
     try:
         say("启动 PostgreSQL")
         compose("up", "-d", "--wait", "postgres", env=env)
