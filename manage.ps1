@@ -95,7 +95,7 @@ function Show-Help {
     Write-Host "【开发与质量门禁】" -ForegroundColor Yellow
     Write-Host "  .\manage.ps1 test           只跑 backend pytest"
     Write-Host "  .\manage.ps1 quality        运行代码质量门禁 (ruff / pyright / pytest / 前端构建)"
-    Write-Host "  .\manage.ps1 demo           起确定性契约后端，只验协议不跑课程阶段"
+    Write-Host "  .\manage.ps1 demo           起确定性契约后端，只验协议不跑检索阶段"
     Write-Host "  .\manage.ps1 smoke          对着已在跑的后端验 HTTP/SSE：断线回放、取消与继续"
     Write-Host "  .\manage.ps1 benchmark      数据集 300 题分层评测对照"
     Write-Host "  .\manage.ps1 blueprints     将 300 题渲染成可读 Markdown"

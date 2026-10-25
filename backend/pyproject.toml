@@ -1,7 +1,7 @@
 [project]
 name = "flowpay"
 version = "0.1.0"
-description = "Traceable runtime for the FlowPay RAG course"
+description = "Traceable runtime for the FlowPay RAG"
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "fastapi>=0.115,<1",

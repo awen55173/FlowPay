@@ -85,7 +85,7 @@ benchmark: ## 数据集 300 题分层对照（PER_TYPE=0 表示全量）
 blueprints: ## 把 300 题渲染成可读 Markdown，落在数据集的 benchmark/readable/
 	@$(with-env) $(PYTHON) scripts/benchmark/render.py
 
-demo: ## 起确定性契约后端，只验协议不跑课程阶段（需先 make setup）
+demo: ## 起确定性契约后端，只验协议不跑检索阶段（需先 make setup）
 	$(VENV) scripts/demo.py --config $(CONFIG)
 
 smoke: ## 对着已在跑的后端验 HTTP/SSE：断线回放、取消与继续

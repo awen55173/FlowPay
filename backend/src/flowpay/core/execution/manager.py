@@ -307,7 +307,7 @@ class SessionManager:
         """取消当前协程并等待退出，再核对是否仍需补写取消事件。
 
         等待退出可避免取消响应先返回、旧任务随后又提交成功的竞态。
-        取消外部请求不保证远端未处理，因此课程工具只允许只读操作。
+        取消外部请求不保证远端未处理，因此工具只允许只读操作。
         """
         async with self.locks[session_id]:
             await self.get_session(session_id)

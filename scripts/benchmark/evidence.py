@@ -1,7 +1,7 @@
-"""把 benchmark 的 evidence ID 与课程实际取到的片段、记录对齐。
+"""把 benchmark 的 evidence ID 与实际取到的片段、记录对齐。
 
-benchmark 和课程各自分块，编号对不上：benchmark 把文档开头的纯标题节也算一块，
-课程的分块器跳过它；课程还会按字符上限再切长节。因此不能按固定偏移换算，
+benchmark 和检索阶段各自分块，编号对不上：benchmark 把文档开头的纯标题节也算一块，
+分块器跳过它；还会按字符上限再切长节。因此不能按固定偏移换算，
 这里按**小节标题**对齐——两边都以 Markdown 的 `## ` 分节，标题是共同的锚点。
 """
 
@@ -36,8 +36,8 @@ def identifiers_in(text: str) -> list[str]:
 def dataset_sections(path: Path) -> list[str]:
     """按 benchmark 的规则分节，返回每节的标题；编号即列表下标加一。
 
-    第一节通常只有文档标题，没有正文。它在 benchmark 里占用 c001，在课程分块里不存在，
-    因此返回的标题为空串，调用方据此判定"这一块课程侧没有对应物"。
+    第一节通常只有文档标题，没有正文。它在 benchmark 里占用 c001，在检索阶段分块里不存在，
+    因此返回的标题为空串，调用方据此判定"这一块检索阶段侧没有对应物"。
     """
     text = path.read_text(encoding="utf-8")
     body = text.split("---", 2)[2] if text.startswith("---") else text
@@ -61,7 +61,7 @@ def dataset_sections(path: Path) -> list[str]:
 
 
 def chunk_alignment() -> dict[str, str]:
-    """benchmark 的 `doc:X#cNNN` → 课程侧的小节标题；纯标题块映射到空串。"""
+    """benchmark 的 `doc:X#cNNN` → 检索阶段侧的小节标题；纯标题块映射到空串。"""
     mapping: dict[str, str] = {}
     for path in sorted((require_dataset() / "data/knowledge").rglob("*.md")):
         doc_id = path.stem.split("_")[0]
@@ -71,7 +71,7 @@ def chunk_alignment() -> dict[str, str]:
 
 
 def section_of(passage_id: str, locator: JsonObject) -> str:
-    """课程片段所属的小节标题；locator 里存的是"文档标题 / 小节标题"。"""
+    """检索阶段片段所属的小节标题；locator 里存的是"文档标题 / 小节标题"。"""
     _ = passage_id
     heading = locator.get("heading")
     text = heading if isinstance(heading, str) else ""

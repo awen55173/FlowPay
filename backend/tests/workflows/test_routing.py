@@ -71,7 +71,7 @@ def test_business_stages_require_an_access_policy_before_starting(
     ],
 )
 def test_invalid_or_retired_entry_is_explicit(stage: str, message: str) -> None:
-    """拼写错误和旧演示模式提供明确错误，不伪装成课程运行。"""
+    """拼写错误和旧演示模式提供明确错误，不伪装成检索阶段运行。"""
     with pytest.raises(ValueError, match=message):
         resolve_stage(stage)
 

@@ -44,9 +44,9 @@ def ask_event(missing: list[str], run: str = "run_1") -> Event:
 
 
 def test_chunk_alignment_skips_the_title_only_block() -> None:
-    """benchmark 把纯标题节算一块，课程分块器跳过它，因此编号整体差一。
+    """benchmark 把纯标题节算一块，检索阶段分块器跳过它，因此编号整体差一。
 
-    对齐靠小节标题而不是编号：纯标题块映射到空串，调用方据此知道课程侧没有对应物。
+    对齐靠小节标题而不是编号：纯标题块映射到空串，调用方据此知道检索阶段侧没有对应物。
     """
     alignment = evidence.chunk_alignment()
     assert alignment["doc:KB-BR-001#c001"] == ""
@@ -55,7 +55,7 @@ def test_chunk_alignment_skips_the_title_only_block() -> None:
 
 
 def test_evidence_matches_by_heading_not_by_number() -> None:
-    """课程取到某小节时，应命中 benchmark 里同标题的那一块。"""
+    """检索阶段取到某小节时，应命中 benchmark 里同标题的那一块。"""
     alignment = evidence.chunk_alignment()
     events = [
         event(

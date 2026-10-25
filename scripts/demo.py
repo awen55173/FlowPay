@@ -1,4 +1,4 @@
-"""启动确定性 HTTP/SSE 验收服务，不调用真实模型或课程工作流。"""
+"""启动确定性 HTTP/SSE 验收服务，不调用真实模型或检索阶段工作流。"""
 
 import argparse
 import logging

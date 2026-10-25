@@ -150,7 +150,7 @@ class Model:
     capabilities: dict[str, bool] = {"tools": True, "streaming": True}
 
     def __init__(self) -> None:
-        """测试显式安排每次调用结果，不用固定业务结论代替真实课程实现。"""
+        """测试显式安排每次调用结果，不用固定业务结论代替真实检索阶段实现。"""
         self.responses: list[ChatCompletion | Exception] = []
         self.requests: list[JsonObject] = []
 

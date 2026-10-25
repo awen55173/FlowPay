@@ -1,6 +1,6 @@
-"""用 dataset 的 300 题跑课程阶段，产出按能力分层的对照报表。
+"""用 dataset 的 300 题跑检索阶段，产出按能力分层的对照报表。
 
-不修改课程代码：只通过 SessionManager 的公开接口提交消息，其余全部从事件日志投影。
+不修改代码：只通过 SessionManager 的公开接口提交消息，其余全部从事件日志投影。
 多轮题由 dataset 自带的确定性模拟用户驱动，追问判定见 conversation.py。
 """
 
@@ -85,7 +85,7 @@ class Arguments(argparse.Namespace):
 
 
 def blueprints() -> list[JsonObject]:
-    """读取 300 题；不区分 dev/test，课程不调参，没有过拟合风险。"""
+    """读取 300 题；不区分 dev/test，每阶段不调参，没有过拟合风险。"""
     source = require_dataset() / "benchmark/design/benchmark_blueprints.jsonl"
     lines = source.read_text(encoding="utf-8").splitlines()
     return [require_object(parse_json(line)) for line in lines]
@@ -366,7 +366,7 @@ async def main() -> None:
         "- **证据全命中**：检索是否走到 benchmark 指定的那几块原文。用别的文档答对时不通过。",
         "",
         (
-            "不报 strict 路由：benchmark 按实体登记工具，课程按关系登记，两套词汇对不上，"
+            "不报 strict 路由：benchmark 按实体登记工具，检索阶段按关系登记，两套词汇对不上，"
             "这是 s3 实测得出的设计而非缺陷。"
         ),
         "",

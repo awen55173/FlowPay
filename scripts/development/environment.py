@@ -37,7 +37,7 @@ else:
 
 ROOT = Path(__file__).resolve().parents[2]
 # 会话与轨迹存在本地 SQLite，只有知识库需要 PostgreSQL。它只发布在 127.0.0.1，
-# 里面是公开的教学数据，所以口令固定在 compose.yaml 与 Makefile 里，.env 不存凭据。
+# 里面是公开的检索阶段数据，所以口令固定在 compose.yaml 与 Makefile 里，.env 不存凭据。
 
 
 class Arguments(argparse.Namespace):

@@ -8,7 +8,7 @@ services:
     image: pgvector/pgvector:0.8.2-pg17
     environment:
       POSTGRES_USER: flowpay_admin
-      # 库只发布在 127.0.0.1，里面是公开的教学数据
+      # 库只发布在 127.0.0.1，里面是公开的检索阶段数据
       POSTGRES_PASSWORD: ${FLOWPAY_DB_PASSWORD:-flowpay_local}
       POSTGRES_DB: flowpay_knowledge
     ports:
