@@ -51,6 +51,7 @@ TYPES = (
     "multi_source",
     "tool_use_diagnostic",
 )
+MULTI_TURN_ONLY_STAGES = frozenset({"s3", "s4"})
 
 ReadEvents = Callable[[str], list[Event]]
 
@@ -100,6 +101,21 @@ def sample(rows: list[JsonObject], per_type: int) -> list[JsonObject]:
         matching = [r for r in rows if require_text(r["question_type"]) == kind]
         picked.extend(matching[:per_type])
     return picked
+
+
+def cases_for_stage(
+    stage: str, rows: list[JsonObject], per_type: int
+) -> list[JsonObject]:
+    """按阶段选择题目，再按题型抽样；s3/s4 只评 progressive-disclosure 题。"""
+    eligible = rows
+    if stage in MULTI_TURN_ONLY_STAGES:
+        eligible = [
+            row
+            for row in rows
+            if require_text(require_object(row["conversation"])["mode"])
+            == "progressive_disclosure"
+        ]
+    return sample(eligible, per_type)
 
 
 def turn_limit(talk: JsonObject) -> int:
@@ -348,15 +364,22 @@ async def main() -> None:
     )
     output.mkdir(parents=True)
     alignment = evidence.chunk_alignment()
-    cases = sample(blueprints(), args.per_type)
+    source_cases = blueprints()
+    stages = args.stages.split(",")
+    stage_cases = {
+        stage: cases_for_stage(stage, source_cases, args.per_type) for stage in stages
+    }
     model = load_settings(args.config).model.name
-    print(f"题目 {len(cases)} 道，阶段 {args.stages}，输出 {output}")
+    stage_counts = ", ".join(
+        f"{stage}: {len(cases)} 道" for stage, cases in stage_cases.items()
+    )
+    print(f"题库 {len(source_cases)} 道；本次各阶段 {stage_counts}；输出 {output}")
 
     report = [
         "# Benchmark 对照报表",
         "",
         (
-            f"题目 {len(cases)} 道，模型 {model}。单次运行，阶段之间几道题的差距"
+            f"各阶段题量：{stage_counts}；模型 {model}。单次运行，阶段之间几道题的差距"
             "不足以区分策略差异与模型波动；方向性结论（某一级在哪类题上更强）才可读。"
         ),
         "",
@@ -372,7 +395,7 @@ async def main() -> None:
         "",
     ]
     results: dict[str, list[Row]] = {}
-    for stage in args.stages.split(","):
+    for stage, cases in stage_cases.items():
         rows = await run_stage(stage, cases, alignment, args, output)
         (output / f"{stage}.jsonl").write_text(
             "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),

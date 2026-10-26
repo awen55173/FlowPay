@@ -7,7 +7,7 @@ import json
 
 import pytest
 from scripts.benchmark import conversation, evidence
-from scripts.benchmark.run import Row, overview, supported, violated
+from scripts.benchmark.run import Row, cases_for_stage, overview, supported, violated
 
 from flowpay.core.event_log.types import Event
 from flowpay.dataset import dataset_root
@@ -165,3 +165,44 @@ def test_overview_separates_single_turn_from_multi_turn() -> None:
     ]
     table = "\n".join(overview({"s4": rows}))
     assert "| s4 | 1/2 | 2/2 | 3/4 | 0/4 |" in table
+
+
+def test_stage_selection_filters_before_per_type_sampling() -> None:
+    """s3/s4 的小样本应从多轮题中抽，s1/s2 则保留单轮与多轮。"""
+    cases: list[dict[str, object]] = []
+    for kind in (
+        "simple_retrieval",
+        "multi_document",
+        "multi_hop",
+        "temporal_versioned",
+        "multi_source",
+        "tool_use_diagnostic",
+    ):
+        cases.extend(
+            [
+                {
+                    "question_id": f"{kind}-single",
+                    "question_type": kind,
+                    "conversation": {"mode": "single_turn_complete"},
+                },
+                {
+                    "question_id": f"{kind}-multi",
+                    "question_type": kind,
+                    "conversation": {"mode": "progressive_disclosure"},
+                },
+            ]
+        )
+
+    s1 = cases_for_stage("s1", cases, 1)
+    s3 = cases_for_stage("s3", cases, 1)
+
+    assert len(s1) == 6
+    assert all(
+        item["question_id"].endswith("-single")
+        for item in s1
+    )
+    assert len(s3) == 6
+    assert all(
+        item["question_id"].endswith("-multi")
+        for item in s3
+    )
